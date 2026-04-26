@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/sports_media.db
+backend/downloads/
+frontend/node_modules/
+frontend/dist/

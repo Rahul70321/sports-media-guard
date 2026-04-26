@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+opencv-python-headless
+imagehash
+Pillow
+beautifulsoup4
+requests
+sqlalchemy
+python-dotenv
+boto3
+psycopg2-binary

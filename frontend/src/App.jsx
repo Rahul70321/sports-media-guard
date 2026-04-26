@@ -5,6 +5,7 @@ import { Shield, Upload, Activity, AlertTriangle, Settings as SettingsIcon } fro
 import Dashboard from './pages/Dashboard';
 import AssetOnboarding from './pages/AssetOnboarding';
 import Settings from './pages/Settings';
+import IncidentReview from './pages/IncidentReview';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -47,20 +48,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/upload" element={<AssetOnboarding />} />
-            {/* Simple placeholder for incidents page */}
-            <Route path="/incidents" element={
-              <div className="page-enter">
-                <div className="header-actions">
-                  <div>
-                    <h1 className="text-gradient">Incident Review</h1>
-                    <p className="text-muted">Review and manage flagged media violations.</p>
-                  </div>
-                </div>
-                <div className="glass-panel">
-                  <p className="text-secondary">Please use the Dashboard to view recent incidents.</p>
-                </div>
-              </div>
-            } />
+            <Route path="/incidents" element={<IncidentReview />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </div>

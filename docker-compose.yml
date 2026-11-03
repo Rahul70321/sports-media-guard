@@ -16,14 +16,41 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/sports_media
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-sports-media-assets-mvp}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-sports-media-assets-mvp}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
+      - AUTHORIZED_FEED_ALLOWLIST=${AUTHORIZED_FEED_ALLOWLIST:-}
+      - WEBHOOK_ALLOWLIST=${WEBHOOK_ALLOWLIST:-}
     depends_on:
       - db
     volumes:
       - ./backend/uploads:/app/uploads
+      - ./backend/downloads:/app/downloads
+
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "worker.py"]
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/sports_media
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - AUTHORIZED_FEED_ALLOWLIST=${AUTHORIZED_FEED_ALLOWLIST:-}
+      - WEBHOOK_ALLOWLIST=${WEBHOOK_ALLOWLIST:-}
+    depends_on:
+      - db
+
+  scheduler:
+    build:
+      context: ./backend
+    command: ["python", "scheduler.py"]
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/sports_media
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - AUTHORIZED_FEED_ALLOWLIST=${AUTHORIZED_FEED_ALLOWLIST:-}
+    depends_on:
+      - db
 
   db:
     image: postgres:15-alpine

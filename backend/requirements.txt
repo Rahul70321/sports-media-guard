@@ -7,5 +7,11 @@ beautifulsoup4
 requests
 sqlalchemy
 python-dotenv
-boto3
+python-multipart
+google-genai
+google-cloud-storage
 psycopg2-binary
+pyjwt
+bcrypt
+alembic
+pytest

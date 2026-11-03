@@ -3,8 +3,14 @@ dist/
 .env
 backend/venv/
 backend/__pycache__/
+**/__pycache__/
+*.pyc
 backend/*.pyc
 backend/sports_media.db
 backend/downloads/
+backend/uploads/
+*.log
+.env*
+.claude/settings.local.json
 frontend/node_modules/
 frontend/dist/

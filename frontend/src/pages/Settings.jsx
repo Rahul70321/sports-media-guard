@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
   ShieldCheck, 
@@ -8,12 +8,17 @@ import {
   Gavel, 
   Lock, 
   Webhook, 
-  Save 
+  Save,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
+import { apiFetch } from '../api';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('general');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
+  const [loadError, setLoadError] = useState(null);
   const [settings, setSettings] = useState({
     // 1. General
     orgName: 'Global Sports League',
@@ -51,31 +56,42 @@ const Settings = () => {
   });
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/settings')
-      .then(res => res.json())
+    apiFetch('/api/settings')
+      .then(res => {
+        if (!res.ok) throw new Error(`Server error (${res.status})`);
+        return res.json();
+      })
       .then(data => {
         if (Object.keys(data).length > 0) {
           setSettings(prev => ({ ...prev, ...data }));
         }
       })
-      .catch(err => console.error(err));
+      .catch(err => {
+        console.error(err);
+        setLoadError('Failed to load settings from server. Using defaults.');
+      });
   }, []);
 
   const handleChange = (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+    setSaveStatus(null); // clear save status when editing
   };
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveStatus(null);
     try {
-      await fetch('http://localhost:8000/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
-      // Could show a success toast here
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 3000);
     } catch (err) {
       console.error(err);
+      setSaveStatus('error');
     } finally {
       setIsSaving(false);
     }
@@ -99,11 +115,35 @@ const Settings = () => {
           <h1 className="text-gradient">Platform Settings</h1>
           <p className="text-muted">Configure organization defaults, detection aggressiveness, and enforcement rules.</p>
         </div>
-        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
-          <Save size={18} />
-          {isSaving ? 'Saving...' : 'Save Changes'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {saveStatus === 'success' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success)', fontSize: '0.9rem', animation: 'pageFadeIn 0.3s ease forwards' }}>
+              <CheckCircle size={16} /> Saved
+            </span>
+          )}
+          {saveStatus === 'error' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)', fontSize: '0.9rem', animation: 'pageFadeIn 0.3s ease forwards' }}>
+              <AlertCircle size={16} /> Save failed
+            </span>
+          )}
+          <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
+            <Save size={18} />
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
       </div>
+
+      {loadError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: 'var(--br-lg)',
+          background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)',
+          color: 'var(--warning)', fontSize: '0.85rem'
+        }}>
+          <AlertCircle size={16} />
+          <span>{loadError}</span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '2rem', flex: 1 }}>
         {/* Settings Sidebar */}
@@ -220,7 +260,7 @@ const Settings = () => {
           {activeTab === 'detection' && (
             <div className="settings-section page-enter">
               <h2>Detection Thresholds</h2>
-              <p className="text-muted" style={{ marginBottom: '1.5rem' }}>Settings that balance catching real piracy vs avoiding noise.</p>
+              <p className="text-muted" style={{ marginBottom: '1.5rem' }}>Settings that balance catching real piracy vs avoiding noise. These thresholds are actively used by the matching engine.</p>
               
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -234,7 +274,7 @@ const Settings = () => {
                   value={settings.videoMatchThreshold} 
                   onChange={e => handleChange('videoMatchThreshold', parseInt(e.target.value))} 
                 />
-                <small className="text-muted" style={{ marginTop: '0.5rem' }}>Lower values catch more variants but increase false positives.</small>
+                <small className="text-muted" style={{ marginTop: '0.5rem' }}>Lower values catch more variants but increase false positives. This value is used by the backend matching engine.</small>
               </div>
               
               <div className="form-group" style={{ marginTop: '1.5rem' }}>

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from fastapi import HTTPException
 
-from database.models import EnforcementAction, EnforcementCase
+from database.models import EnforcementAction, EnforcementCase, utcnow
 from services.audit_service import incident_event
 
 
@@ -45,7 +45,7 @@ def transition_incident(db, incident, actor, new_status: str, reason: str = ""):
     incident.status = new_status
     incident.review_reason = reason or incident.review_reason
     incident.assigned_to = actor.id
-    incident.updated_at = datetime.utcnow()
+    incident.updated_at = utcnow()
     incident_event(db, incident, actor.id, "status_changed", old, new_status, reason)
     return incident
 
@@ -61,7 +61,7 @@ def prepare_case(db, incident, actor, jurisdiction: str = "", claimant: str = ""
     case.jurisdiction = jurisdiction
     case.claimant = claimant
     case.notice_text = notice
-    case.updated_at = datetime.utcnow()
+    case.updated_at = utcnow()
     db.flush()
     return case
 
@@ -71,7 +71,7 @@ def approve_case(db, case, actor):
         raise HTTPException(status_code=403, detail="Admin or legal role required to approve an enforcement case")
     case.status = "approved"
     case.approved_by = actor.id
-    case.approved_at = datetime.utcnow()
+    case.approved_at = utcnow()
     return case
 
 

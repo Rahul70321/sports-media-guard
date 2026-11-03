@@ -1,8 +1,13 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
-from datetime import datetime
+from datetime import datetime, timezone
 import os
+
+
+def utcnow() -> datetime:
+    """Naive UTC timestamp, matching what SQLite/Postgres DateTime columns store."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # Fetch from environment (e.g. postgresql://user:pass@host:port/dbname)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sports_media.db")
@@ -26,7 +31,7 @@ class Organization(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, default="Sports Media Guard")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class User(Base):
@@ -39,7 +44,7 @@ class User(Base):
     role = Column(String, default="analyst") # 'admin', 'legal', 'analyst'
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 class Asset(Base):
     __tablename__ = "assets"
@@ -50,7 +55,7 @@ class Asset(Base):
     file_path = Column(String)
     media_type = Column(String) # 'image' or 'video'
     rights_policy = Column(String) # e.g., 'exclusive_broadcast', 'region_locked_na'
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     content_sha256 = Column(String, nullable=True, index=True)
@@ -80,7 +85,7 @@ class DiscoveredMedia(Base):
     source_metadata = Column(Text, nullable=True)
     content_sha256 = Column(String, nullable=True, index=True)
     file_path = Column(String)                        # local downloaded path for analysis
-    discovered_at = Column(DateTime, default=datetime.utcnow)
+    discovered_at = Column(DateTime, default=utcnow)
 
     # Multi-algorithm fingerprints
     fingerprint_hash = Column(String)                 # Primary phash (backward compat)
@@ -105,8 +110,8 @@ class Incident(Base):
     video_frame_score = Column(Float, default=0.0)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     review_reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     # Individual similarity signal scores
     phash_score = Column(Float, default=0.0)
@@ -129,7 +134,7 @@ class SystemSettings(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     settings_data = Column(String) # Stored as JSON string
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class ScanJob(Base):
@@ -144,10 +149,10 @@ class ScanJob(Base):
     result_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class MonitoringTarget(Base):
@@ -165,8 +170,8 @@ class MonitoringTarget(Base):
     last_success_at = Column(DateTime, nullable=True)
     last_failure_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class TargetSchedule(Base):
@@ -180,7 +185,7 @@ class TargetSchedule(Base):
     next_run_at = Column(DateTime, nullable=True, index=True)
     concurrency_policy = Column(String, nullable=False, default="skip")
     max_attempts = Column(Integer, nullable=False, default=3)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class MonitoringRun(Base):
@@ -204,10 +209,10 @@ class MonitoringRun(Base):
     lease_expires_at = Column(DateTime, nullable=True, index=True)
     heartbeat_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class RunEvent(Base):
@@ -218,7 +223,7 @@ class RunEvent(Base):
     status = Column(String, nullable=False)
     progress = Column(Integer, nullable=False, default=0)
     message = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class EvidenceObject(Base):
@@ -233,7 +238,7 @@ class EvidenceObject(Base):
     sha256 = Column(String, nullable=False, index=True)
     source_url = Column(String, nullable=True)
     authorization_mode = Column(String, nullable=False, default="manual_upload")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class EvidenceManifest(Base):
@@ -245,7 +250,7 @@ class EvidenceManifest(Base):
     version = Column(Integer, nullable=False, default=1)
     manifest_json = Column(Text, nullable=False)
     digest = Column(String, nullable=False, unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class IncidentEvent(Base):
@@ -259,7 +264,7 @@ class IncidentEvent(Base):
     new_status = Column(String, nullable=True)
     reason = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class EnforcementCase(Base):
@@ -273,8 +278,8 @@ class EnforcementCase(Base):
     notice_text = Column(Text, nullable=True)
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class EnforcementAction(Base):
@@ -288,7 +293,7 @@ class EnforcementAction(Base):
     request_json = Column(Text, nullable=True)
     response_json = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class AuditLog(Base):
@@ -301,7 +306,7 @@ class AuditLog(Base):
     resource_type = Column(String, nullable=False)
     resource_id = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class NotificationDelivery(Base):
@@ -315,7 +320,7 @@ class NotificationDelivery(Base):
     status = Column(String, nullable=False, default="pending")
     payload_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     delivered_at = Column(DateTime, nullable=True)
 
 
@@ -327,7 +332,7 @@ class ScanJobEvent(Base):
     status = Column(String, nullable=False)
     progress = Column(Integer, nullable=False, default=0)
     message = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
 
 Base.metadata.create_all(bind=engine)

@@ -27,6 +27,7 @@ from database.models import (
     SessionLocal, Asset, Incident, DiscoveredMedia, SystemSettings, User, ScanJob, ScanJobEvent,
     MonitoringTarget, TargetSchedule, MonitoringRun, RunEvent, EvidenceManifest, IncidentEvent,
     EnforcementCase, EnforcementAction, AuditLog, NotificationDelivery,
+    utcnow,
 )
 from services.fingerprint_service import generate_fingerprint
 from services.watermark_service import embed_watermark, extract_watermark, verify_watermark, WatermarkEmbeddingError
@@ -314,7 +315,7 @@ async def social_login(
 
     # Auto-generate credentials/profile if default demo click
     if not email:
-        ts = int(datetime.utcnow().timestamp())
+        ts = int(utcnow().timestamp())
         email = f"{provider}_user_{ts % 10000}@sportsguard.io"
     if not full_name:
         provider_display = {"google": "Google", "github": "GitHub", "facebook": "Facebook", "instagram": "Instagram", "gmail": "Gmail"}.get(provider, provider.capitalize())
@@ -324,7 +325,7 @@ async def social_login(
     if not user:
         user = User(
             email=email,
-            hashed_password=hash_password(f"social_{provider}_{datetime.utcnow().isoformat()}"),
+            hashed_password=hash_password(f"social_{provider}_{utcnow().isoformat()}"),
             full_name=full_name,
             role="analyst",
             is_active=True
@@ -658,7 +659,7 @@ async def watermark_embed(
         )
 
     # Save uploaded file
-    temp_path = os.path.join(UPLOAD_DIR, f"wm_embed_{int(datetime.utcnow().timestamp())}_{file.filename}")
+    temp_path = os.path.join(UPLOAD_DIR, f"wm_embed_{int(utcnow().timestamp())}_{file.filename}")
     total_size = 0
     with open(temp_path, "wb") as buffer:
         while True:
@@ -711,7 +712,7 @@ async def watermark_extract(
         )
 
     # Save uploaded file
-    temp_path = os.path.join(UPLOAD_DIR, f"wm_extract_{int(datetime.utcnow().timestamp())}_{file.filename}")
+    temp_path = os.path.join(UPLOAD_DIR, f"wm_extract_{int(utcnow().timestamp())}_{file.filename}")
     with open(temp_path, "wb") as buffer:
         content = await file.read()
         if len(content) > MAX_FILE_SIZE_BYTES:
@@ -759,7 +760,7 @@ async def watermark_verify(
         )
 
     # Save uploaded file
-    temp_path = os.path.join(UPLOAD_DIR, f"wm_verify_{int(datetime.utcnow().timestamp())}_{file.filename}")
+    temp_path = os.path.join(UPLOAD_DIR, f"wm_verify_{int(utcnow().timestamp())}_{file.filename}")
     with open(temp_path, "wb") as buffer:
         content = await file.read()
         if len(content) > MAX_FILE_SIZE_BYTES:
@@ -814,11 +815,11 @@ def _run_scan_job(job_id: str, url: str, crawler, platform: str):
             job.status = status
             job.progress = progress
             job.message = message
-            job.updated_at = datetime.utcnow()
+            job.updated_at = utcnow()
             if status == "running" and not job.started_at:
-                job.started_at = datetime.utcnow()
+                job.started_at = utcnow()
             if status in {"completed", "failed"}:
-                job.completed_at = datetime.utcnow()
+                job.completed_at = utcnow()
             if result is not None:
                 job.result_json = json.dumps(result)
                 if status == "failed":
@@ -971,7 +972,7 @@ def create_target(payload: dict = Body(...), db: Session = Depends(get_db), curr
     )
     db.add(target)
     db.flush()
-    db.add(TargetSchedule(target_id=target.id, interval_seconds=int(payload.get("interval_seconds") or 900), enabled=True, next_run_at=datetime.utcnow()))
+    db.add(TargetSchedule(target_id=target.id, interval_seconds=int(payload.get("interval_seconds") or 900), enabled=True, next_run_at=utcnow()))
     audit(db, current_user.id, "target_created", "monitoring_target", target.id, {"adapter": adapter_name}, current_user.organization_id)
     db.commit()
     return {"id": target.id, "status": target.status, "capabilities": capabilities}

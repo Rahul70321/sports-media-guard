@@ -5,7 +5,7 @@ from datetime import datetime
 
 import requests
 
-from database.models import NotificationDelivery
+from database.models import NotificationDelivery, utcnow
 from services.url_policy import configured_allow_hosts, validate_outbound_url
 
 
@@ -31,7 +31,7 @@ def notify(db, event_type: str, payload: dict, webhook_url: str = "", organizati
             delivery.error_message = str(exc)[:500]
     else:
         delivery.status = "recorded"
-    delivery.delivered_at = datetime.utcnow()
+    delivery.delivered_at = utcnow()
     db.add(delivery)
     db.commit()
     return delivery

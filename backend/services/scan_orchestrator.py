@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from database.models import DiscoveredMedia, MonitoringRun, MonitoringTarget, RunEvent, SessionLocal, TargetSchedule
+from database.models import DiscoveredMedia, MonitoringRun, MonitoringTarget, RunEvent, SessionLocal, TargetSchedule, utcnow
 from services.adapters.registry import adapter_for_url, get_adapter
 from services.evidence_service import file_sha256
 from services.fingerprint_service import generate_fingerprint
@@ -69,7 +69,7 @@ def execute_run(run_id: str):
         run.checkpoint_json = json.dumps({"url": url, "configuration": configuration, **(page.checkpoint or {})})
         _update(db, run, "completed", 100, "Monitoring run completed", result)
         if target:
-            target.last_success_at = datetime.utcnow()
+            target.last_success_at = utcnow()
             db.commit()
     except Exception as exc:
         db.rollback()
@@ -87,7 +87,7 @@ def claim_due_runs(limit: int = 5):
     db = SessionLocal()
     claimed = []
     try:
-        now = datetime.utcnow()
+        now = utcnow()
         schedules = db.query(TargetSchedule).filter(TargetSchedule.enabled == True, TargetSchedule.next_run_at <= now).all()
         for schedule in schedules:
             target = db.query(MonitoringTarget).filter(MonitoringTarget.id == schedule.target_id, MonitoringTarget.status == "active").first()
@@ -192,12 +192,12 @@ def _update(db, run: MonitoringRun, status: str, progress: int, message: str, re
     run.status = status
     run.progress = progress
     run.message = message[:500]
-    run.updated_at = datetime.utcnow()
-    run.heartbeat_at = datetime.utcnow()
+    run.updated_at = utcnow()
+    run.heartbeat_at = utcnow()
     if status == "running" and not run.started_at:
-        run.started_at = datetime.utcnow()
+        run.started_at = utcnow()
     if status in {"completed", "permanent_failure", "cancelled"}:
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utcnow()
     if result and status != "completed":
         run.error_message = result.get("message", "")[:1000]
     db.add(RunEvent(run_id=run.id, status=status, progress=progress, message=run.message))

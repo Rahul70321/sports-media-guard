@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime
 
-from database.models import EvidenceManifest, EvidenceObject
+from database.models import EvidenceManifest, EvidenceObject, utcnow
 
 
 def file_sha256(path: str) -> str:
@@ -37,7 +37,7 @@ def create_evidence_object(db, discovered, evidence_type: str, storage_key: str,
 def create_manifest(db, incident, discovered, evidence: dict):
     payload = {
         "version": 1,
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": utcnow().isoformat() + "Z",
         "source_url": discovered.source_url,
         "platform": discovered.platform,
         "platform_item_id": discovered.platform_item_id,

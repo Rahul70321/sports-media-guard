@@ -12,5 +12,9 @@ backend/uploads/
 *.log
 .env*
 .claude/settings.local.json
+# Local agent/tooling config (contains machine-local endpoints and tokens)
+.agent/
+.claude/
+.codex/
 frontend/node_modules/
 frontend/dist/

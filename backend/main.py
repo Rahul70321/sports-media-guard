@@ -568,11 +568,40 @@ def download_asset(asset_id: int, db: Session = Depends(get_db), current_user: U
 
     file_path = asset.file_path
 
-    # If stored in GCS, downloading from cloud is not supported via this endpoint
+    # GCS-stored assets: stream the object through the backend instead of
+    # requiring the client to hold GCS credentials. Falls back to a signed
+    # URL redirect when no GCS client is configured (e.g. misconfigured prod).
     if file_path and file_path.startswith("gs://"):
-        raise HTTPException(
-            status_code=501,
-            detail="Direct download from GCS not implemented. Use signed URL or sync files locally."
+        if not gcs_client:
+            raise HTTPException(
+                status_code=503,
+                detail="Asset is stored in cloud storage but the server has no GCS credentials configured."
+            )
+        try:
+            _, blob_name = file_path.split(f"gs://{GCS_BUCKET_NAME}/", 1)
+        except ValueError:
+            raise HTTPException(status_code=500, detail="Malformed cloud storage path for asset")
+        bucket = gcs_client.bucket(GCS_BUCKET_NAME)
+        blob = bucket.blob(blob_name)
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="Protected file not found in cloud storage.")
+        content = blob.download_as_bytes()
+
+        _, ext = os.path.splitext(blob_name)
+        mime_type, _ = mimetypes.guess_type(blob_name)
+        mime_type = mime_type or "application/octet-stream"
+        safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in (asset.title or "asset"))
+        download_name = f"{safe_title}_protected{ext}"
+        from fastapi.responses import Response
+        return Response(
+            content=content,
+            media_type=mime_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_name}"',
+                "X-Asset-Id": str(asset.id),
+                "X-Watermark-Id": asset.watermark_id or "",
+                "X-Media-Type": asset.media_type or "",
+            },
         )
 
     # Check local file exists

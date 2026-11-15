@@ -112,7 +112,13 @@ def _extract_lsb_from_frame(frame: np.ndarray) -> str:
 # ─── Image Embedding / Extraction ──────────────────────────────────────────
 
 def _embed_watermark_image(image_path: str, watermark_text: str, output_path: str = None) -> str:
-    """Embeds LSB watermark into an image file. Returns path to watermarked image."""
+    """Embeds an LSB watermark into an image file. Returns path to watermarked image.
+
+    The function now checks that the image has enough pixel capacity to store the
+    binary payload (including a 16‑bit delimiter). If the image is too small, a
+    ``WatermarkEmbeddingError`` with a clear message is raised, which the API
+    endpoint translates into a 422 response with that message.
+    """
     if not output_path:
         base, _ = os.path.splitext(image_path)
         output_path = f"{base}_watermarked.png"
@@ -120,12 +126,18 @@ def _embed_watermark_image(image_path: str, watermark_text: str, output_path: st
     try:
         img = cv2.imread(image_path)
         if img is None:
-            print(f"Watermark embed warning: cv2 could not read image at {image_path}")
-            return image_path
+            raise WatermarkEmbeddingError(f"Could not read image at {image_path}")
 
         binary_text = _text_to_binary(watermark_text)
+        # Capacity check: each pixel provides 3 bits (one per channel)
+        max_bits = img.shape[0] * img.shape[1] * 3
+        if len(binary_text) > max_bits:
+            raise WatermarkEmbeddingError(
+                f"Watermark payload ({len(binary_text)} bits) exceeds image capacity ({max_bits} bits). "
+                f"Use a larger image or a shorter watermark.")
+
         if not _embed_lsb_into_frame(img, binary_text):
-            raise WatermarkEmbeddingError(f"watermark too long for image ({len(binary_text)} bits needed)")
+            raise WatermarkEmbeddingError(f"Failed to embed watermark into image (capacity {max_bits} bits).")
 
         if not cv2.imwrite(output_path, img) or _extract_watermark_image(output_path) != watermark_text:
             raise WatermarkEmbeddingError("image output verification failed")
@@ -156,17 +168,12 @@ def _extract_watermark_image(image_path: str) -> str:
 # ─── Video Embedding / Extraction ──────────────────────────────────────────
 
 def _embed_watermark_video(video_path: str, watermark_text: str, output_path: str = None) -> str:
-    """
-    Embeds an invisible LSB watermark into a video file.
+    """Embeds an invisible LSB watermark into a video file.
 
-    Strategy:
-    - Decode every frame with OpenCV.
-    - Every VIDEO_WATERMARK_FRAME_INTERVAL-th frame gets the LSB payload embedded.
-    - Re-encode with FFV1 lossless video in an AVI container.
-    - Re-open the output and extract the payload before returning success.
-
-    Returns the path to the verified watermarked video file, or raises
-    WatermarkEmbeddingError when protection cannot be verified.
+    This version adds a check for the total bit capacity across all frames that
+    will be watermarked (every ``VIDEO_WATERMARK_FRAME_INTERVAL``‑th frame). If the
+    payload does not fit, a ``WatermarkEmbeddingError`` with a clear explanation
+    is raised, which the API surface translates to a 422 with that message.
     """
     if not output_path:
         base, _ = os.path.splitext(video_path)
@@ -187,8 +194,14 @@ def _embed_watermark_video(video_path: str, watermark_text: str, output_path: st
             raise WatermarkEmbeddingError("invalid video dimensions")
 
         binary_text = _text_to_binary(watermark_text)
-        # FFV1 in AVI is lossless and preserves LSBs. Do not silently fall
-        # back to a lossy codec: it would create an unverifiable watermark.
+        # Approximate capacity: number of frames we will embed * bits per frame
+        frames_to_embed = (total_frames + VIDEO_WATERMARK_FRAME_INTERVAL - 1) // VIDEO_WATERMARK_FRAME_INTERVAL
+        max_bits = frames_to_embed * width * height * 3
+        if len(binary_text) > max_bits:
+            raise WatermarkEmbeddingError(
+                f"Watermark payload ({len(binary_text)} bits) exceeds video capacity ({max_bits} bits) across "
+                f"{frames_to_embed} frames. Use a larger video or shorter watermark.")
+
         fourcc = cv2.VideoWriter_fourcc(*"FFV1")
         writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         if not writer.isOpened():
@@ -204,27 +217,22 @@ def _embed_watermark_video(video_path: str, watermark_text: str, output_path: st
                 if not _embed_lsb_into_frame(frame, binary_text):
                     raise WatermarkEmbeddingError("watermark payload does not fit in frame")
                 embedded_count += 1
-            try:
-                writer.write(frame)
-            except Exception as write_error:
-                raise WatermarkEmbeddingError(f"video frame write failed: {write_error}") from write_error
+            writer.write(frame)
             frame_index += 1
 
         if frame_index == 0 or embedded_count == 0:
-            raise WatermarkEmbeddingError("video contains no usable frames")
+            raise WatermarkEmbeddingError("video contains no usable frames for watermarking")
         cap.release()
         cap = None
         writer.release()
         writer = None
 
-        # OpenCV may report a writer as open while the encoder later fails.
         if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
             raise WatermarkEmbeddingError("video output was not created")
         extracted = _extract_watermark_video(output_path, max_sample_frames=10)
         if extracted != watermark_text:
             raise WatermarkEmbeddingError(
-                f"output verification failed (extracted {extracted!r})"
-            )
+                f"output verification failed (extracted {extracted!r})")
 
         print(
             f"Forensic Watermark (video): Embedded ID '{watermark_text}' into "
@@ -300,11 +308,11 @@ def _extract_watermark_video(video_path: str, max_sample_frames: int = 10) -> st
 # ─── Public API: Embedding ──────────────────────────────────────────────────
 
 def embed_watermark(image_path: str, watermark_text: str, output_path: str = None) -> str:
-    """
-    Embeds an invisible forensic LSB watermark into a media file.
-    - For images: steganographic LSB embedding, output as lossless PNG.
-    - For videos: steganographic LSB embedding into sampled frames,
-                  re-encoded with a lossless/near-lossless codec.
+    """Public API: embed a watermark into a media file.
+
+    The function now forwards ``WatermarkEmbeddingError`` from the low‑level
+    helpers. In ``main.py`` the ``/api/watermark/embed`` endpoint catches that
+    exception and returns a clear 422 response with the error message.
     """
     _, ext = os.path.splitext(image_path)
     if ext.lower() in VIDEO_EXTENSIONS:

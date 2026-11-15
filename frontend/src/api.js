@@ -1,4 +1,8 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const configuredUrl = import.meta.env.VITE_API_URL;
+const storedUrl = typeof window !== 'undefined' ? localStorage.getItem('custom_api_url') : null;
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const API_URL = storedUrl || configuredUrl || (isLocalhost ? 'http://localhost:8000' : 'https://sports-media-guard.onrender.com');
 
 export const apiFetch = (endpoint, options = {}) => {
   const token = localStorage.getItem('token');

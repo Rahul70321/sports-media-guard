@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   frontend:
     build:
@@ -14,17 +12,14 @@ services:
       context: ./backend
     ports:
       - "8000:8000"
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/sports_media
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-sports-media-assets-mvp}
-      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
-      - AUTHORIZED_FEED_ALLOWLIST=${AUTHORIZED_FEED_ALLOWLIST:-}
-      - WEBHOOK_ALLOWLIST=${WEBHOOK_ALLOWLIST:-}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://127.0.0.1:5173,http://127.0.0.1:80
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/downloads:/app/downloads
@@ -33,24 +28,30 @@ services:
     build:
       context: ./backend
     command: ["python", "worker.py"]
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/sports_media
-      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - AUTHORIZED_FEED_ALLOWLIST=${AUTHORIZED_FEED_ALLOWLIST:-}
       - WEBHOOK_ALLOWLIST=${WEBHOOK_ALLOWLIST:-}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   scheduler:
     build:
       context: ./backend
     command: ["python", "scheduler.py"]
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/sports_media
-      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - AUTHORIZED_FEED_ALLOWLIST=${AUTHORIZED_FEED_ALLOWLIST:-}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:15-alpine
@@ -60,6 +61,11 @@ services:
       - POSTGRES_DB=sports_media
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sports_media"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
     volumes:
       - pgdata:/var/lib/postgresql/data
 

@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: mode === 'production' ? '/sports-media-guard/' : '/',
+  base: process.env.VITE_BASE_PATH || (process.env.GITHUB_PAGES ? '/sports-media-guard/' : '/'),
 }))

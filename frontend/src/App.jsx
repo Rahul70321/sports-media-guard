@@ -70,11 +70,14 @@ const Sidebar = ({ user, onOpenLogin, onLogout }) => {
 };
 
 const AuthModal = ({ isOpen, onClose, onLoginSuccess, initialError }) => {
-  const [isRegister, setIsRegister] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState(initialError || null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState(null); // tracks which provider is loading
 
@@ -89,10 +92,11 @@ const AuthModal = ({ isOpen, onClose, onLoginSuccess, initialError }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setSuccessMessage(null);
     setLoading(true);
 
-    const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
-    const payload = isRegister ? { email, password, full_name: fullName || 'User', role: 'admin' } : { email, password };
+    const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
+    const payload = authMode === 'register' ? { email, password, full_name: fullName || 'User', role: 'admin' } : { email, password };
 
     try {
       const res = await apiFetch(endpoint, {
@@ -106,6 +110,62 @@ const AuthModal = ({ isOpen, onClose, onLoginSuccess, initialError }) => {
       localStorage.setItem('token', data.access_token);
       onLoginSuccess(data.user || { email, full_name: fullName || 'User' });
       onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setLoading(true);
+
+    try {
+      const res = await apiFetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to request password reset');
+
+      if (data.reset_token) {
+        setResetToken(data.reset_token);
+        setSuccessMessage(`Reset token generated (offline dev mode): ${data.reset_token}`);
+      } else {
+        setSuccessMessage(data.message || 'If that email is registered, a reset token has been issued.');
+      }
+      setAuthMode('reset');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setLoading(true);
+
+    try {
+      const res = await apiFetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, new_password: newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Password reset failed');
+
+      setSuccessMessage('Password updated successfully! You can now sign in with your new password.');
+      setPassword('');
+      setNewPassword('');
+      setResetToken('');
+      setAuthMode('login');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -237,9 +297,14 @@ const AuthModal = ({ isOpen, onClose, onLoginSuccess, initialError }) => {
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
     }}>
       <div className="glass-panel" style={{ width: '420px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>{isRegister ? 'Create Account' : 'Sign In to SportsGuard'}</h2>
+        <h2 style={{ marginBottom: '0.5rem' }}>
+          {authMode === 'register' ? 'Create Account' : authMode === 'forgot' ? 'Forgot Password' : authMode === 'reset' ? 'Set New Password' : 'Sign In to SportsGuard'}
+        </h2>
         <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-          {isRegister ? 'Register as a Rights Analyst or Admin' : 'Choose your preferred sign-in method'}
+          {authMode === 'register' ? 'Register as a Rights Analyst or Admin' :
+           authMode === 'forgot' ? 'Enter your registered email to receive a password reset token' :
+           authMode === 'reset' ? 'Enter the reset token and choose your new password' :
+           'Choose your preferred sign-in method'}
         </p>
 
         {error && (
@@ -264,35 +329,43 @@ const AuthModal = ({ isOpen, onClose, onLoginSuccess, initialError }) => {
           </div>
         )}
 
-        {/* Quick Demo Credentials Preset */}
-        <div style={{ background: 'var(--bg-tertiary, rgba(255,255,255,0.05))', padding: '0.75rem', borderRadius: 'var(--br-md, 8px)', marginBottom: '1.25rem', border: '1px solid var(--glass-border, rgba(255,255,255,0.08))' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Instant Access (No Credentials Required):
+        {successMessage && (
+          <div style={{ padding: '0.75rem', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: 'var(--success, #22c55e)', fontSize: '0.85rem', marginBottom: '1rem', wordBreak: 'break-word' }}>
+            {successMessage}
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ flex: 1, padding: '0.4rem 0.5rem', fontSize: '0.75rem', justifyContent: 'center' }}
-              onClick={handleDirectAdminLogin}
-              disabled={loading}
-            >
-              ⚡ 1-Click Admin
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ flex: 1, padding: '0.4rem 0.5rem', fontSize: '0.75rem', justifyContent: 'center' }}
-              onClick={() => handleSocialLogin('analyst', false)}
-              disabled={socialLoading !== null}
-            >
-              ⚡ 1-Click Analyst
-            </button>
-          </div>
-        </div>
+        )}
 
-        {/* Social Login Buttons */}
-        {!isRegister && (
+        {/* Quick Demo Credentials Preset - only in login mode */}
+        {authMode === 'login' && (
+          <div style={{ background: 'var(--bg-tertiary, rgba(255,255,255,0.05))', padding: '0.75rem', borderRadius: 'var(--br-md, 8px)', marginBottom: '1.25rem', border: '1px solid var(--glass-border, rgba(255,255,255,0.08))' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Instant Access (No Credentials Required):
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '0.4rem 0.5rem', fontSize: '0.75rem', justifyContent: 'center' }}
+                onClick={handleDirectAdminLogin}
+                disabled={loading}
+              >
+                ⚡ 1-Click Admin
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '0.4rem 0.5rem', fontSize: '0.75rem', justifyContent: 'center' }}
+                onClick={() => handleSocialLogin('analyst', false)}
+                disabled={socialLoading !== null}
+              >
+                ⚡ 1-Click Analyst
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Social Login Buttons - only in login mode */}
+        {authMode === 'login' && (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1.5rem' }}>
               {socialProviders.map((provider) => (
@@ -362,36 +435,104 @@ const AuthModal = ({ isOpen, onClose, onLoginSuccess, initialError }) => {
           </>
         )}
 
-        <form onSubmit={handleSubmit}>
-          {isRegister && (
+        {/* Login & Register Form */}
+        {(authMode === 'login' || authMode === 'register') && (
+          <form onSubmit={handleSubmit}>
+            {authMode === 'register' && (
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input type="text" className="form-input" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Full Name" required />
+              </div>
+            )}
             <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input type="text" className="form-input" value={fullName} onChange={e => setFullName(e.target.value)} required />
+              <label className="form-label">Email</label>
+              <input type="email" className="form-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" required />
             </div>
-          )}
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input type="email" className="form-input" value={email} onChange={e => setEmail(e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Password</label>
-            <input type="password" className="form-input" value={password} onChange={e => setPassword(e.target.value)} required />
-          </div>
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label">Password</label>
+                {authMode === 'login' && (
+                  <span
+                    onClick={() => { setAuthMode('forgot'); setError(null); setSuccessMessage(null); }}
+                    style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}
+                  >
+                    Forgot password?
+                  </span>
+                )}
+              </div>
+              <input type="password" className="form-input" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required />
+            </div>
 
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={loading}>
-            {loading ? 'Processing...' : (isRegister ? 'Register' : 'Sign In with Email')}
-          </button>
-        </form>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={loading}>
+              {loading ? 'Processing...' : (authMode === 'register' ? 'Register' : 'Sign In with Email')}
+            </button>
+          </form>
+        )}
 
-        <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <span
-            onClick={() => { setIsRegister(!isRegister); setError(null); }}
-            style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}
-          >
-            {isRegister ? 'Sign In' : 'Register'}
-          </span>
-        </div>
+        {/* Forgot Password Request Form */}
+        {authMode === 'forgot' && (
+          <form onSubmit={handleForgotPassword}>
+            <div className="form-group">
+              <label className="form-label">Your Account Email</label>
+              <input type="email" className="form-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" required />
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={loading}>
+              {loading ? 'Requesting Reset...' : 'Send Password Reset Token'}
+            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '0.85rem' }}>
+              <span
+                onClick={() => { setAuthMode('login'); setError(null); setSuccessMessage(null); }}
+                style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                ← Back to Sign In
+              </span>
+              <span
+                onClick={() => { setAuthMode('reset'); setError(null); }}
+                style={{ color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                Already have a token?
+              </span>
+            </div>
+          </form>
+        )}
+
+        {/* Reset Password Submission Form */}
+        {authMode === 'reset' && (
+          <form onSubmit={handleResetPassword}>
+            <div className="form-group">
+              <label className="form-label">Reset Token</label>
+              <input type="text" className="form-input" value={resetToken} onChange={e => setResetToken(e.target.value)} placeholder="Paste 32-character reset token" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">New Password (minimum 8 characters)</label>
+              <input type="password" className="form-input" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Enter new password" minLength={8} required />
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={loading}>
+              {loading ? 'Updating Password...' : 'Set New Password'}
+            </button>
+            <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
+              <span
+                onClick={() => { setAuthMode('login'); setError(null); setSuccessMessage(null); }}
+                style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                ← Back to Sign In
+              </span>
+            </div>
+          </form>
+        )}
+
+        {/* Switch between Login and Register */}
+        {(authMode === 'login' || authMode === 'register') && (
+          <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            {authMode === 'register' ? 'Already have an account?' : "Don't have an account?"}{' '}
+            <span
+              onClick={() => { setAuthMode(authMode === 'register' ? 'login' : 'register'); setError(null); setSuccessMessage(null); }}
+              style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {authMode === 'register' ? 'Sign In' : 'Register'}
+            </span>
+          </div>
+        )}
 
         <button onClick={onClose} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
       </div>
